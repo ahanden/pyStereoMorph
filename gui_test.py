@@ -5,19 +5,41 @@ from PyQt6.QtQml import QQmlApplicationEngine
 from PyQt6.QtCore import *
 from PyQt6 import QtCore
 from PyQt6.QtQuick import QQuickView
+from PySide6.QtWidgets import QLabel
 
-class CameraConfig(QObject):
-    def __init__(self, camera_name, parent=None):
-        super().__init__(parent)
-        self._name = camera_name
-        self.rotation = None
-        self.flip_v = False
-        self.flip_h = False
-        self.filename = None
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtQml import *
 
-    @pyqtSlot(str)
-    def name(self):
-        return self._name
+from PySide6.QtCore import QObject, Slot
+from PySide6.QtQml import QmlElement
+
+import cv2
+
+QML_IMPORT_NAME = "io.qt.textproperties"
+QML_IMPORT_MAJOR_VERSION = 1
+
+
+@QmlElement
+class VideoFrame(QObject):
+    pyqtSlot
+
+    @Slot(str)
+    def setVideo(self, filename):
+        video = cv2.VideoCapture(video_filename)
+        status, frame = video.read()
+        thumbnail_height = 128
+        thumbnail_width = frame.shape[1] * thumbnail_height // frame.shape[0]
+        frame = cv2.resize(frame, (thumbnail_width, thumbnail_height))
+
+        thumbnail = QImage(
+            frame,
+            frame.shape[1],
+            frame.shape[0],
+            QImage.Format.Format_BGR888,
+        )
+        this.setPixmap(QPixmap.fromImage(thumbnail))
 
 class CameraList(QAbstractListModel):
     def __init__(self, cameras=[], parent=None):
@@ -32,31 +54,24 @@ class CameraList(QAbstractListModel):
 
     def addCamera(self, camera_name):
         self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount())
-        #self.cameras.append(CameraConfig(camera_name))
         self.cameras.append({
             "name": camera_name,
-            "rotation": None,
+            "rotation": '',
             "flip_v": False,
             "flip_h": False,
-            "calibrate_file": None,
+            "calibrate_file": '',
         })
         self.endInsertRows()
 
-class FocusArea(QObject):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.active_camera_config = cameras.cameras[0]
-
-    def focus(self, index):
-        self.active_camera_config = cameras.cameras[index]
-
-    @pyqtSlot()
-    def config(self):
-        return self.active_camera_config
-
-    @pyqtSlot()
-    def name(self):
-        return self.active_camera_config['name']
+    @pyqtSlot(int, str, str, bool, bool, str)
+    def updateCamera(self, index, name, rotation, flip_v, flip_h, calibrate_file):
+        self.cameras[index] = {
+            "name": name,
+            "rotation": rotation,
+            "flip_v": flip_v,
+            "flip_h": flip_h,
+            "calibrate_file": calibrate_file,
+        }
 
 app = QGuiApplication(sys.argv)
 
@@ -65,12 +80,11 @@ cameras.addCamera("Camera 1")
 cameras.addCamera("Camera 2")
 
 engine = QQmlApplicationEngine()
+engine.addImportPath(sys.path[0])
+engine.loadFromModule("QmlIntegration", "VideoFrame")
 engine.quit.connect(app.quit)
 engine.rootContext().setContextProperty('cameraModel', cameras)
-focus_area = FocusArea()
-engine.rootContext().setContextProperty('focusArea', focus_area)
 
-#class CameraBtn:
 class CameraBtn(QObject):
     def __init__(self):
         super().__init__()
@@ -81,10 +95,6 @@ class CameraBtn(QObject):
 
 btn = CameraBtn()
 engine.rootContext().setContextProperty('addCameraBtn', btn)
-
-def new_focus(i):
-    active_camera = cameras.cameras[i]
-engine.rootContext().setContextProperty('focusConfig', new_focus)
 
 engine.load('main.qml')
 sys.exit(app.exec())
