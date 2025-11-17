@@ -1,12 +1,9 @@
-from PyQt6.QtCore import *
-from PyQt6.QtWidgets import *
-from PyQt6.QtSvgWidgets import *
-from PyQt6.QtGui import QIntValidator
-
-from PySide6 import QtCore as psQtCore
-
 import generate_pattern as gp
 
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import *
+from PySide6.QtSvgWidgets import QSvgWidget
+from PySide6.QtGui import QIntValidator
 
 class BoardDisplay(QWidget):
     def __init__(self, config):
@@ -57,6 +54,8 @@ class BoardDisplay(QWidget):
         self.board_widget.load(gp.render(self.board_img, width, height, vwidth=150, vheight=120))
 
 class BoardConfig(QWidget):
+    updated = Signal((int,), (str,))
+
     def __init__(self, config):
         super().__init__()
 
@@ -77,6 +76,7 @@ class BoardConfig(QWidget):
         btn_layout = QHBoxLayout()
 
         self.apply_btn = QPushButton("Save Changes")
+        self.apply_btn.pressed.connect(lambda: self.updated.emite(True))
         btn_layout.addWidget(self.apply_btn)
         self.discard_btn = QPushButton("Cancel")
         btn_layout.addWidget(self.discard_btn)
@@ -98,6 +98,7 @@ class BoardConfig(QWidget):
         }
 
 class BoardWidget(QWidget):
+    updated = Signal(bool)
     def __init__(self, board_params=None):
         super().__init__()
 
@@ -119,8 +120,11 @@ class BoardWidget(QWidget):
         self.display_widget.config_btn.pressed.connect(self.toggle_edit)
 
         self.config_widget = BoardConfig(self.board_params)
+        self.config_widget.updated.connect(self.apply_changes)
+
         self.config_widget.discard_btn.pressed.connect(self.toggle_display)
-        self.config_widget.apply_btn.pressed.connect(self.apply_changes)
+        #self.config_widget.apply_btn.pressed.connect(self.apply_changes)
+
 
         self.stack_layout.addWidget(self.display_widget)
         self.stack_layout.addWidget(self.config_widget)

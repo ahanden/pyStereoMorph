@@ -1,8 +1,8 @@
 
-from PyQt6.QtCore import *
-from PyQt6.QtWidgets import *
-from PyQt6.QtSvgWidgets import *
-from PyQt6.QtGui import *
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtWidgets import *
+from PySide6.QtSvgWidgets import QSvgWidget
+from PySide6.QtGui import QIntValidator
 
 import cv2
 

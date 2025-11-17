@@ -1,6 +1,5 @@
 import sys
-from PyQt6.QtCore import *
-from PyQt6.QtWidgets import *
+from PySide6.QtWidgets import *
 
 '''
 Going to just start the design with the calibration ONLY.
