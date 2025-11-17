@@ -31,6 +31,9 @@ def get_first_frame(filename, rotate=0, v_flip=False, h_flip=False):
     video = cv2.VideoCapture(filename)
     status, frame = video.read()
     frame = reorient(frame, rotate, v_flip,h_flip)
+    return frame
+
+def paint_frame(widget, frame):
     thumbnail_height = 128
     thumbnail_width = frame.shape[1] * thumbnail_height // frame.shape[0]
     frame = cv2.resize(frame, (thumbnail_width, thumbnail_height))
@@ -40,10 +43,11 @@ def get_first_frame(filename, rotate=0, v_flip=False, h_flip=False):
         frame.shape[0],
         QImage.Format.Format_BGR888,
     )
-    return QPixmap.fromImage(thumbnail)
+    widget.setPixmap(QPixmap.fromImage(thumbnail))
 
 class CameraDisplay(QWidget):
     request_edit = Signal(bool)
+    calibrated = Signal(tuple)
     def __init__(self, config):
         super().__init__()
 
@@ -51,7 +55,6 @@ class CameraDisplay(QWidget):
 
         self.name_label = QLabel()
         self.video_path = QLabel()
-        self.video_frame = QLabel()
         self.edit_btn = QPushButton("Settings")
         self.edit_btn.pressed.connect(lambda: self.request_edit.emit(True))
         self.calib_btn = QPushButton("Calibrate")
@@ -60,7 +63,13 @@ class CameraDisplay(QWidget):
 
         layout.addWidget(self.name_label)
         layout.addWidget(self.video_path)
-        layout.addWidget(self.video_frame)
+
+        frame_layout = QHBoxLayout()
+        self.video_frame = QLabel()
+        frame_layout.addWidget(self.video_frame)
+        self.calib_frame = QLabel()
+        frame_layout.addWidget(self.calib_frame)
+        layout.addLayout(frame_layout)
 
         self.calib_stack = QStackedLayout()
 
@@ -91,29 +100,36 @@ class CameraDisplay(QWidget):
                 config['v_flip'],
                 config['h_flip'],
             )
-            self.video_frame.setPixmap(frame_data)
-            self.video_frame.setMinimumSize(
-                frame_data.rect().height(),
-                frame_data.rect().width(),
-            )
+            paint_frame(self.video_frame, frame_data)
+            self.video_frame.setMinimumSize(*frame_data.shape[:2])
         else:
             self.video_path.setText("Missing calibration video file")
 
     def calibrate(self):
         self.cc = CameraCalibration(
-            #"D:\\StereoMorph\\stereomorph\\Calibrate_videos\\A_ppv_scale.avi",
-            "D:\\StereoMorph\\stereomorph\\Calibrate_videos\\C_scale_lateral.avi",
-            7, 6, # FIX THIS
+            "/Users/piunti/Desktop/A_ppv_scale.m4v",
+            8, 6,
             0,
             False,
             False,
         )
         self.calib_stack.setCurrentIndex(1)
-        self.cc.progress.connect(self.progress_bar.setValue)
-        self.cc.finished.connect(lambda: self.calib_stack.setCurrentIndex(0))
+        self.cc.progress.connect(self.update_calibrate_progress)
+        self.cc.finished.connect(self.done_calibrating)
         self.cc.finished.connect(self.cc.deleteLater)
         self.cc.start()
 
+    def update_calibrate_progress(self, args):
+        progress, frame = args
+        self.progress_bar.setValue(progress)
+        paint_frame(self.calib_frame, frame)
+
+    def done_calibrating(self):
+        self.calib_stack.setCurrentIndex(0)
+        mtx = self.cc.mtx
+        dist = self.cc.dist
+        self.calib_frame.clear()
+        self.calibrated.emit((mtx, dist))
 
 
 class CameraConfig(QWidget):
@@ -198,7 +214,6 @@ class CameraConfig(QWidget):
         }
 
     def open_file_chooser(self):
-        #filename = QFileDialog.getOpenFileName(self, "Open File", "", "Text Files (*.txt);;All Files (*)")
         filename, _ = QFileDialog.getOpenFileName(self, "Open File")
         if filename:
             self.video_file = filename
@@ -214,32 +229,32 @@ class CameraConfig(QWidget):
                 config['v_flip'],
                 config['h_flip'],
             )
-            self.video_frame_label.setPixmap(frame_data)
-            self.video_frame_label.setMinimumSize(
-                frame_data.rect().height(),
-                frame_data.rect().width(),
-            )
+            paint_frame(self.video_frame_label, frame_data)
+            self.video_frame_label.setMinimumSize(*frame_data.shape[:2])
 
 class CameraWidget(QWidget):
     updated = Signal(dict)
     def __init__(self, config, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.calibration = False
+
         self.stack_layout = QStackedLayout()
 
         self.camera_display = CameraDisplay(config)
-        #self.camera_display.edit_btn.pressed.connect(self.toggle_config)
         self.camera_display.request_edit.connect(self.toggle_config)
+        self.camera_display.calibrated.connect(self.update_calibration)
         self.camera_config = CameraConfig(config)
-        #self.camera_config.cancel_btn.pressed.connect(self.toggle_display)
         self.camera_config.cancelled.connect(self.toggle_display)
-        #self.camera_config.submit_btn.pressed.connect(self.update_config)
         self.camera_config.updated.connect(self.update_config)
 
         self.stack_layout.addWidget(self.camera_display)
         self.stack_layout.addWidget(self.camera_config)
 
         self.setLayout(self.stack_layout)
+
+    def update_calibration(self, calib):
+        self.calibration = calib
 
     def toggle_display(self):
         self.stack_layout.setCurrentIndex(0)
