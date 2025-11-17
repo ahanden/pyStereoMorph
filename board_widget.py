@@ -100,7 +100,7 @@ class BoardConfig(QWidget):
         }
 
 class BoardWidget(QWidget):
-    updated = Signal(bool)
+    updated = Signal(dict)
     def __init__(self, board_params=None):
         super().__init__()
 
@@ -139,7 +139,8 @@ class BoardWidget(QWidget):
     def toggle_display(self):
         self.stack_layout.setCurrentIndex(0)
 
-    def apply_changes(self):
-        self.board_params = self.config_widget.get_config()
+    def apply_changes(self, config):
+        self.board_params = config
         self.display_widget.update(self.board_params)
         self.stack_layout.setCurrentIndex(0)
+        self.updated.emit(config)

@@ -26,6 +26,9 @@ At the bottom are buttons to add cameras and perform calibration.
 from board_widget import BoardWidget
 from camera_widget import CameraList, CameraWidget
 
+board_config = {}
+camera_configs = []
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -42,6 +45,7 @@ class MainWindow(QMainWindow):
                 "nx": 3,
                 "ny": 2,
             })
+        board_widget.updated.connect(self.update_board_config)
 
         camera_list = CameraList()
 
@@ -59,6 +63,9 @@ class MainWindow(QMainWindow):
         widget.setLayout(layout)
         self.setCentralWidget(widget)
 
+    def update_board_config(self, config):
+        board_config = config
+        print(board_config)
 
 app = QApplication(sys.argv)
 
