@@ -24,7 +24,7 @@ At the bottom are buttons to add cameras and perform calibration.
 '''
 
 from board_widget import BoardWidget
-from camera_widget import CameraList, CameraWidget
+from CameraWidget.camera_widget import CameraList
 
 board_config = {}
 camera_configs = []
