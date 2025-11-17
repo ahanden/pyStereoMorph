@@ -44,9 +44,11 @@ def paint_frame(widget, frame):
         QImage.Format.Format_BGR888,
     )
     widget.setPixmap(QPixmap.fromImage(thumbnail))
+    widget.setMinimumSize(*frame.shape[:2])
 
 class CameraDisplay(QWidget):
     request_edit = Signal(bool)
+    start_calibration = Signal(bool)
     calibrated = Signal(tuple)
     def __init__(self, config):
         super().__init__()
@@ -58,8 +60,8 @@ class CameraDisplay(QWidget):
         self.edit_btn = QPushButton("Settings")
         self.edit_btn.pressed.connect(lambda: self.request_edit.emit(True))
         self.calib_btn = QPushButton("Calibrate")
-        self.calib_btn.pressed.connect(self.calibrate)
-
+        self.calib_btn.pressed.connect(lambda: self.start_calibration.emit(True))
+        self.calib_btn.setEnabled(False)
 
         layout.addWidget(self.name_label)
         layout.addWidget(self.video_path)
@@ -79,6 +81,9 @@ class CameraDisplay(QWidget):
         btn_widget = QWidget()
         btn_widget.setLayout(btn_layout)
         self.calib_stack.addWidget(btn_widget)
+
+        self.calib_msg = QLabel("Not calibrated")
+        layout.addWidget(self.calib_msg)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -101,35 +106,16 @@ class CameraDisplay(QWidget):
                 config['h_flip'],
             )
             paint_frame(self.video_frame, frame_data)
-            self.video_frame.setMinimumSize(*frame_data.shape[:2])
+            self.calib_btn.setEnabled(True)
         else:
             self.video_path.setText("Missing calibration video file")
-
-    def calibrate(self):
-        self.cc = CameraCalibration(
-            "/Users/piunti/Desktop/A_ppv_scale.m4v",
-            8, 6,
-            0,
-            False,
-            False,
-        )
-        self.calib_stack.setCurrentIndex(1)
-        self.cc.progress.connect(self.update_calibrate_progress)
-        self.cc.finished.connect(self.done_calibrating)
-        self.cc.finished.connect(self.cc.deleteLater)
-        self.cc.start()
+            self.calib_btn.setEnabled(False)
 
     def update_calibrate_progress(self, args):
         progress, frame = args
         self.progress_bar.setValue(progress)
         paint_frame(self.calib_frame, frame)
 
-    def done_calibrating(self):
-        self.calib_stack.setCurrentIndex(0)
-        mtx = self.cc.mtx
-        dist = self.cc.dist
-        self.calib_frame.clear()
-        self.calibrated.emit((mtx, dist))
 
 
 class CameraConfig(QWidget):
@@ -230,7 +216,6 @@ class CameraConfig(QWidget):
                 config['h_flip'],
             )
             paint_frame(self.video_frame_label, frame_data)
-            self.video_frame_label.setMinimumSize(*frame_data.shape[:2])
 
 class CameraWidget(QWidget):
     updated = Signal(dict)
@@ -238,11 +223,12 @@ class CameraWidget(QWidget):
         super().__init__(*args, **kwargs)
 
         self.calibration = False
-
+        self.config = {}
         self.stack_layout = QStackedLayout()
 
         self.camera_display = CameraDisplay(config)
         self.camera_display.request_edit.connect(self.toggle_config)
+        self.camera_display.start_calibration.connect(self.calibrate)
         self.camera_display.calibrated.connect(self.update_calibration)
         self.camera_config = CameraConfig(config)
         self.camera_config.cancelled.connect(self.toggle_display)
@@ -252,6 +238,9 @@ class CameraWidget(QWidget):
         self.stack_layout.addWidget(self.camera_config)
 
         self.setLayout(self.stack_layout)
+
+    def set_board_config(self, config):
+        self.board_config = config
 
     def update_calibration(self, calib):
         self.calibration = calib
@@ -263,13 +252,49 @@ class CameraWidget(QWidget):
         self.stack_layout.setCurrentIndex(1)
 
     def update_config(self, config):
-        self.config = config
-        self.camera_display.update(self.config)
+        same = True
+        for key in config.keys():
+            if self.config.get(key, None) != config[key]:
+                same = False
+                break
+        if not same:
+            self.config = config
+            self.camera_display.update(self.config)
+            self.camera_display.calib_msg.setText("Not calibrated")
         self.updated.emit(config)
         self.toggle_display()
 
     def get_config(self):
         return self.camera_config.get_config()
+
+    def calibrate(self):
+        self.camera_display.calib_msg.clear()
+        camera_config = self.get_config()
+        self.cc = CameraCalibration(
+            camera_config['video_file'],
+            self.board_config['nx'],
+            self.board_config['ny'],
+            camera_config['rotation'],
+            camera_config['v_flip'],
+            camera_config['h_flip'],
+        )
+        self.camera_display.calib_stack.setCurrentIndex(1)
+        self.cc.progress.connect(self.camera_display.update_calibrate_progress)
+        self.cc.finished.connect(self.done_calibrating)
+        self.cc.finished.connect(self.cc.deleteLater)
+        self.cc.start()
+
+    def done_calibrating(self):
+        self.camera_display.calib_stack.setCurrentIndex(0)
+        mtx = self.cc.mtx
+        dist = self.cc.dist
+        frames = self.cc.frames_with_corners
+        if mtx is not None:
+            self.camera_display.calib_msg.setText(f"Calibration successful with {frames} frames")
+        else:
+            self.camera_display.calib_msg.setText(f"Calibration failed with {frames} frames")
+        self.camera_display.calib_frame.clear()
+        #self.calibrated.emit((mtx, dist))
 
 class CameraList(QWidget):
     def __init__(self):
@@ -306,4 +331,10 @@ class CameraList(QWidget):
             "h_flip": False,
             "video_file": '',
         })
+        self.camera_list.append(camera_widget)
         self.scroll_area_layout.addWidget(camera_widget)
+
+    def set_board_params(self, board_config):
+        self.board_config = board_config
+        for widget in self.camera_list:
+            widget.set_board_config(board_config)

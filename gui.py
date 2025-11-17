@@ -42,30 +42,30 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout()
         board_widget = BoardWidget({
                 "type": "checkerboard",
-                "nx": 3,
-                "ny": 2,
+                "nx": 8,
+                "ny": 6,
             })
         board_widget.updated.connect(self.update_board_config)
 
-        camera_list = CameraList()
+        self.camera_list = CameraList()
+        self.camera_list.set_board_params(board_widget.board_params)
 
         btn_layout = QHBoxLayout()
         add_btn = QPushButton("Add Camera")
-        add_btn.pressed.connect(camera_list.add_camera)
+        add_btn.pressed.connect(self.camera_list.add_camera)
         calib_btn = QPushButton("Calibrate Cameras")
         btn_layout.addWidget(add_btn)
         btn_layout.addWidget(calib_btn)
 
         widget = QWidget()
         layout.addWidget(board_widget)
-        layout.addWidget(camera_list)
+        layout.addWidget(self.camera_list)
         layout.addLayout(btn_layout)
         widget.setLayout(layout)
         self.setCentralWidget(widget)
 
     def update_board_config(self, config):
-        board_config = config
-        print(board_config)
+        self.camera_list.set_board_params(config)
 
 app = QApplication(sys.argv)
 

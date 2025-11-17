@@ -13,6 +13,9 @@ class CameraCalibration(QThread):
         self.v_flip = v_flip
         self.h_flip = h_flip
         self.sample_rate = 30
+        self.mtx = None
+        self.dist = None
+        self.frames_with_corners = 0
 
     def draw_chessboard(self, frame, corners):
         to_int = lambda _: (int(i) for i in _)
@@ -80,15 +83,16 @@ class CameraCalibration(QThread):
                 frame,
             ))
 
-        ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
-            objpoints,
-            imgpoints,
-            gray.shape[::-1],
-            None,
-            None,
-        )
+        if self.frames_with_corners > 0:
+            ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
+                objpoints,
+                imgpoints,
+                gray.shape[::-1],
+                None,
+                None,
+            )
 
-        self.mtx = mtx
-        self.dist = dist
+            self.mtx = mtx
+            self.dist = dist
 
         self.finished.emit()
