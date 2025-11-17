@@ -6,12 +6,12 @@ from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtGui import QIntValidator
 
 class BoardDisplay(QWidget):
+    request_edit = Signal(bool)
     def __init__(self, config):
         super().__init__()
         self.layout = QStackedLayout()
 
         # Eventually we should have a way to print the boards and all that.
-        # For display, purposes, we don't.
 
         outer_layout = QHBoxLayout()
         stats_layout = QVBoxLayout()
@@ -21,7 +21,9 @@ class BoardDisplay(QWidget):
 
 
         self.config_btn = QPushButton("Settings")
+        self.config_btn.pressed.connect(lambda: self.request_edit.emit(True))
 
+        # svg still doesn't display correctly
         self.board_widget = QSvgWidget()
         self.board_widget.setMinimumSize(175, 124)
         self.board_widget.setMaximumSize(175, 124)
@@ -54,7 +56,7 @@ class BoardDisplay(QWidget):
         self.board_widget.load(gp.render(self.board_img, width, height, vwidth=150, vheight=120))
 
 class BoardConfig(QWidget):
-    updated = Signal((int,), (str,))
+    updated = Signal(dict)
 
     def __init__(self, config):
         super().__init__()
@@ -76,7 +78,7 @@ class BoardConfig(QWidget):
         btn_layout = QHBoxLayout()
 
         self.apply_btn = QPushButton("Save Changes")
-        self.apply_btn.pressed.connect(lambda: self.updated.emite(True))
+        self.apply_btn.pressed.connect(lambda: self.updated.emit(self.get_config()))
         btn_layout.addWidget(self.apply_btn)
         self.discard_btn = QPushButton("Cancel")
         btn_layout.addWidget(self.discard_btn)
@@ -117,14 +119,12 @@ class BoardWidget(QWidget):
         self.stack_layout = QStackedLayout()
 
         self.display_widget = BoardDisplay(self.board_params)
-        self.display_widget.config_btn.pressed.connect(self.toggle_edit)
+        self.display_widget.request_edit.connect(self.toggle_edit)
 
         self.config_widget = BoardConfig(self.board_params)
         self.config_widget.updated.connect(self.apply_changes)
 
         self.config_widget.discard_btn.pressed.connect(self.toggle_display)
-        #self.config_widget.apply_btn.pressed.connect(self.apply_changes)
-
 
         self.stack_layout.addWidget(self.display_widget)
         self.stack_layout.addWidget(self.config_widget)
