@@ -108,6 +108,7 @@ class CameraWidget(QWidget):
             camera_config['rotation'],
             camera_config['v_flip'],
             camera_config['h_flip'],
+            camera_config['sample_rate'],
         )
         self.camera_display.calib_stack.setCurrentIndex(1)
         self.cc.progress.connect(self.camera_display.update_calibrate_progress)
@@ -161,6 +162,7 @@ class CameraList(QWidget):
             "v_flip": False,
             "h_flip": False,
             "video_file": '',
+            "sample_rate": 1,
         })
         self.camera_list.append(camera_widget)
         self.scroll_area_layout.addWidget(camera_widget)

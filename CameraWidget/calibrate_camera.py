@@ -4,7 +4,7 @@ from PySide6.QtCore import QThread, Signal
 
 class CameraCalibration(QThread):
     progress = Signal(tuple)
-    def __init__(self, video_filename, nx, ny, rotate, v_flip, h_flip):
+    def __init__(self, video_filename, nx, ny, rotate, v_flip, h_flip, sample_rate):
         super().__init__()
         self.video_filename = video_filename
         self.nx = nx
@@ -12,7 +12,7 @@ class CameraCalibration(QThread):
         self.rotate = rotate
         self.v_flip = v_flip
         self.h_flip = h_flip
-        self.sample_rate = 30
+        self.sample_rate = sample_rate
         self.mtx = None
         self.dist = None
         self.frames_with_corners = 0

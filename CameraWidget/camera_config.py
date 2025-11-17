@@ -46,6 +46,14 @@ class CameraConfig(QWidget):
         orient_layout.addWidget(self.vflip_input)
         orient_layout.addWidget(self.hflip_input)
 
+        sample_layout = QHBoxLayout()
+        sample_layout.addWidget(QLabel("Calibration sample rate:"))
+        self.sample_rate = QLineEdit()
+        onlyInt = QIntValidator()
+        onlyInt.setRange(1, 999)
+        self.sample_rate.setValidator(onlyInt)
+        sample_layout.addWidget(self.sample_rate)
+
         self.submit_btn = QPushButton("Save Changes")
         self.submit_btn.pressed.connect(lambda: self.updated.emit(self.get_config()))
         self.cancel_btn = QPushButton("Cancel")
@@ -58,6 +66,7 @@ class CameraConfig(QWidget):
         outer_layout.addWidget(self.video_frame_label)
         outer_layout.addLayout(file_row_layout)
         outer_layout.addLayout(orient_layout)
+        outer_layout.addLayout(sample_layout)
         outer_layout.addLayout(btn_layout)
 
         self.setLayout(outer_layout)
@@ -68,6 +77,7 @@ class CameraConfig(QWidget):
         self.camera_name.setText(config['name'])
         self.rotation_input.setText(str(config['rotation']))
         self.video_file = config['video_file']
+        self.sample_rate.setText(str(config['sample_rate']))
         if self.video_file:
             self.file_label.setText(config['video_file'])
         else:
@@ -89,6 +99,7 @@ class CameraConfig(QWidget):
             "v_flip": self.vflip_input.checkState() == Qt.CheckState.Checked,
             "h_flip": self.hflip_input.checkState() == Qt.CheckState.Checked,
             "video_file": self.video_file,
+            "sample_rate": int(self.sample_rate.text()),
         }
 
     def open_file_chooser(self):
