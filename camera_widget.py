@@ -2,7 +2,7 @@
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import *
 from PySide6.QtSvgWidgets import QSvgWidget
-from PySide6.QtGui import QIntValidator
+from PySide6.QtGui import QIntValidator, QImage, QPixmap
 
 import cv2
 
@@ -43,6 +43,7 @@ def get_first_frame(filename, rotate=0, v_flip=False, h_flip=False):
     return QPixmap.fromImage(thumbnail)
 
 class CameraDisplay(QWidget):
+    request_edit = Signal(bool)
     def __init__(self, config):
         super().__init__()
 
@@ -52,6 +53,7 @@ class CameraDisplay(QWidget):
         self.video_path = QLabel()
         self.video_frame = QLabel()
         self.edit_btn = QPushButton("Settings")
+        self.edit_btn.pressed.connect(lambda: self.request_edit.emit(True))
         self.calib_btn = QPushButton("Calibrate")
         self.calib_btn.pressed.connect(self.calibrate)
 
@@ -68,11 +70,6 @@ class CameraDisplay(QWidget):
         btn_widget = QWidget()
         btn_widget.setLayout(btn_layout)
         self.calib_stack.addWidget(btn_widget)
-
-        #policy = QSizePolicy()
-        #policy.setRetainSizeWhenHidden(True)
-        #self.calib_btn.setSizePolicy(policy)
-        #self.calib_btn.hide()
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -120,6 +117,8 @@ class CameraDisplay(QWidget):
 
 
 class CameraConfig(QWidget):
+    updated = Signal(dict)
+    cancelled = Signal(bool)
     def __init__(self, config):
         super().__init__()
 
@@ -154,7 +153,9 @@ class CameraConfig(QWidget):
         orient_layout.addWidget(self.hflip_input)
 
         self.submit_btn = QPushButton("Save Changes")
+        self.submit_btn.pressed.connect(lambda: self.updated.emit(self.get_config()))
         self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.pressed.connect(lambda: self.cancelled.emit(True))
         btn_layout = QHBoxLayout()
         btn_layout.addWidget(self.submit_btn)
         btn_layout.addWidget(self.cancel_btn)
@@ -220,16 +221,20 @@ class CameraConfig(QWidget):
             )
 
 class CameraWidget(QWidget):
+    updated = Signal(dict)
     def __init__(self, config, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.stack_layout = QStackedLayout()
 
         self.camera_display = CameraDisplay(config)
-        self.camera_display.edit_btn.pressed.connect(self.toggle_config)
+        #self.camera_display.edit_btn.pressed.connect(self.toggle_config)
+        self.camera_display.request_edit.connect(self.toggle_config)
         self.camera_config = CameraConfig(config)
-        self.camera_config.cancel_btn.pressed.connect(self.toggle_display)
-        self.camera_config.submit_btn.pressed.connect(self.update_config)
+        #self.camera_config.cancel_btn.pressed.connect(self.toggle_display)
+        self.camera_config.cancelled.connect(self.toggle_display)
+        #self.camera_config.submit_btn.pressed.connect(self.update_config)
+        self.camera_config.updated.connect(self.update_config)
 
         self.stack_layout.addWidget(self.camera_display)
         self.stack_layout.addWidget(self.camera_config)
@@ -242,9 +247,10 @@ class CameraWidget(QWidget):
     def toggle_config(self):
         self.stack_layout.setCurrentIndex(1)
 
-    def update_config(self):
-        self.config = self.camera_config.get_config()
+    def update_config(self, config):
+        self.config = config
         self.camera_display.update(self.config)
+        self.updated.emit(config)
         self.toggle_display()
 
     def get_config(self):
