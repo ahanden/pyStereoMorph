@@ -25,6 +25,7 @@ At the bottom are buttons to add cameras and perform calibration.
 '''
 
 from board_widget import BoardWidget
+from camera_widget import CameraList, CameraWidget
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -43,11 +44,21 @@ class MainWindow(QMainWindow):
                 "ny": 2,
             })
 
-        # Set the central widget of the Window.
+        camera_list = CameraList()
+
+        btn_layout = QHBoxLayout()
+        add_btn = QPushButton("Add Camera")
+        add_btn.pressed.connect(camera_list.add_camera)
+        calib_btn = QPushButton("Calibrate Cameras")
+        btn_layout.addWidget(add_btn)
+        btn_layout.addWidget(calib_btn)
 
         widget = QWidget()
+        layout.addWidget(board_widget)
+        layout.addWidget(camera_list)
+        layout.addLayout(btn_layout)
         widget.setLayout(layout)
-        self.setCentralWidget(board_widget)
+        self.setCentralWidget(widget)
 
 
 app = QApplication(sys.argv)
