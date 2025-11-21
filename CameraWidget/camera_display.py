@@ -75,6 +75,7 @@ class CameraDisplay(QWidget):
             self.calib_btn.setEnabled(False)
 
     def update_calibrate_progress(self, args):
-        progress, frame = args
+        progress, frame, msg = args
         self.progress_bar.setValue(progress)
-        paint_frame(self.calib_frame, frame)
+        if frame is not None:
+            paint_frame(self.calib_frame, frame)

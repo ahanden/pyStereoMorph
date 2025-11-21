@@ -120,7 +120,7 @@ class CameraWidget(QWidget):
         self.camera_display.calib_stack.setCurrentIndex(0)
         mtx = self.cc.mtx
         dist = self.cc.dist
-        frames = self.cc.frames_with_corners
+        frames = len(self.cc.frames_with_corners)
         if mtx is not None:
             self.camera_display.calib_msg.setText(f"Calibration successful with {frames} frames")
         else:
