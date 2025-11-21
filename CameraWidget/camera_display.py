@@ -12,6 +12,7 @@ from CameraWidget.frame_painter import *
 class CameraDisplay(QWidget):
     request_edit = Signal(bool)
     start_calibration = Signal(bool)
+    delete = Signal(bool)
     calibrated = Signal(tuple)
     def __init__(self, config):
         super().__init__()
@@ -25,6 +26,8 @@ class CameraDisplay(QWidget):
         self.calib_btn = QPushButton("Calibrate")
         self.calib_btn.pressed.connect(lambda: self.start_calibration.emit(True))
         self.calib_btn.setEnabled(False)
+        self.del_btn = QPushButton("Delete")
+        self.del_btn.pressed.connect(lambda: self.delete.emit(True))
 
         layout.addWidget(self.name_label)
         layout.addWidget(self.video_path)
@@ -41,6 +44,7 @@ class CameraDisplay(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.addWidget(self.edit_btn)
         btn_layout.addWidget(self.calib_btn)
+        btn_layout.addWidget(self.del_btn)
         btn_widget = QWidget()
         btn_widget.setLayout(btn_layout)
         self.calib_stack.addWidget(btn_widget)

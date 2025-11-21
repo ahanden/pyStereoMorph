@@ -50,8 +50,10 @@ def paint_frame(widget, frame):
 
 class CameraWidget(QWidget):
     updated = Signal(dict)
-    def __init__(self, config, *args, **kwargs):
+    delete = Signal(int)
+    def __init__(self, cam_id, config, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.id = cam_id
 
         self.calibration = False
         self.config = {}
@@ -61,6 +63,7 @@ class CameraWidget(QWidget):
         self.camera_display.request_edit.connect(self.toggle_config)
         self.camera_display.start_calibration.connect(self.calibrate)
         self.camera_display.calibrated.connect(self.update_calibration)
+        self.camera_display.delete.connect(lambda: self.delete.emit(self.id))
         self.camera_config = CameraConfig(config)
         self.camera_config.cancelled.connect(self.toggle_display)
         self.camera_config.updated.connect(self.update_config)
@@ -155,9 +158,20 @@ class CameraList(QWidget):
         self.add_camera()
 
     def add_camera(self):
-        index = self.scroll_area_layout.count() + 1
-        camera_widget = CameraWidget({
-            "name": f"Camera {index}",
+        if self.camera_list:
+            cam_id = max((cam.id for cam in self.camera_list)) + 1
+            cam_names = {cam.get_config()['name'] for cam in self.camera_list}
+            cam_index = cam_id
+            name = f"Camera {cam_index}"
+            while name in cam_names:
+                cam_index += 1
+                name = f"Camera {cam_index}"
+        else:
+            cam_id = 1
+            name = "Camera 1"
+
+        camera_widget = CameraWidget(cam_id, {
+            "name": name,
             "rotation": 0,
             "v_flip": False,
             "h_flip": False,
@@ -166,7 +180,14 @@ class CameraList(QWidget):
             "sample_rate": 1,
         })
         self.camera_list.append(camera_widget)
+        camera_widget.delete.connect(self.delete_camera)
         self.scroll_area_layout.addWidget(camera_widget)
+
+    def delete_camera(self, cam_id):
+        idx = next(idx for idx, cam in enumerate(self.camera_list) if cam.id == cam_id)
+        cam = self.scroll_area_layout.takeAt(idx)
+        self.camera_list.pop(idx)
+        cam.widget().deleteLater()
 
     def set_board_params(self, board_config):
         self.board_config = board_config
