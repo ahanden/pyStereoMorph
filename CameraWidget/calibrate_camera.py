@@ -19,6 +19,18 @@ class CameraCalibration(QThread):
         self.criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
         self.rvecs = None
         self.tvecs = None
+        self.frames_with_corners = []
+        self.imgpoints = []
+
+    def get_calibration(self):
+        return {
+            "mtx": self.mtx,
+            "dist": self.dist,
+            "rvecs": self.rvecs,
+            "tvecs": self.tvecs,
+            "frames_with_corners": self.frames_with_corners,
+            "imgpoints": self.imgpoints,
+        }
 
     def zoom(self, img, cx, cy, zoom):
         h, w, _ = [ zoom * i for i in img.shape ]
@@ -133,7 +145,8 @@ class CameraCalibration(QThread):
         objp[:,:2] = np.mgrid[0:self.ny, 0:self.nx].T.reshape(-1, 2)
 
         objpoints = []
-        imgpoints = []
+        self.imgpoints = []
+        self.frames_with_corners = []
 
         self.video_stream = cv2.VideoCapture(self.video_filename)
         total_frames = int(self.video_stream.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -142,32 +155,22 @@ class CameraCalibration(QThread):
             self.shape = frame.shape[:2]
             if corners is not None:
                 objpoints.append(objp)
-                imgpoints.append(corners)
+                self.imgpoints.append(corners)
                 frame = self.draw_chessboard(frame, corners)
+                self.frames_with_corners.append(idx)
             self.progress.emit((
                 min(int(100 * idx / total_frames), 100),
                 frame,
                 "Detecting calibration board",
             ))
 
-        self.frames_with_corners = len(objpoints)
-
         if not self.frames_with_corners:
             raise Exception("Insufficient frames")
-            '''
-            ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
-                objpoints,
-                imgpoints,
-                gray.shape[::-1],
-                None,
-                None,
-            )
-            '''
 
         self.progress.emit((0, None, "Computing intrinsic properties"))
         h, w = self.shape
         if self.distorted:
-            self.calc_distorted_intrinsics(imgpoints, objpoints)
+            self.calc_distorted_intrinsics(self.imgpoints, objpoints)
             newcameramtx, roi = cv2.getOptimalNewCameraMatrix(
                 self.mtx,
                 self.dist,
@@ -186,11 +189,11 @@ class CameraCalibration(QThread):
                 "Estimation complete",
             ))
         else:
-            self.mtx = cv2.initCameraMatrix2D(objpoints, imgpoints, (w, h))
+            self.mtx = cv2.initCameraMatrix2D(objpoints, self.imgpoints, (w, h))
 
-            for i in self.calc_intrinsics(imgpoints, objpoints):
+            for i in self.calc_intrinsics(self.imgpoints, objpoints):
                 self.progress.emit((
-                    100 * (i + 1) / len(imgpoints),
+                    100 * (i + 1) / len(self.imgpoints),
                     None,
                     "Calculating pose",
                 ))
