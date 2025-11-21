@@ -16,7 +16,6 @@ class CameraCalibration(QThread):
         self.mtx = None
         self.dist = None
         self.distorted = distorted
-        self.frames_with_corners = []
         self.criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
         self.rvecs = None
         self.tvecs = None
@@ -121,7 +120,6 @@ class CameraCalibration(QThread):
             None,
             None,
         )
-        print(dist)
         if ret:
             self.rvecs = rvecs
             self.tvecs = tvecs
@@ -139,12 +137,10 @@ class CameraCalibration(QThread):
 
         self.video_stream = cv2.VideoCapture(self.video_filename)
         total_frames = int(self.video_stream.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.frames_with_corners = []
         self.shape = None
         for idx, frame, corners in self.detect_chessboard(self.video_stream):
             self.shape = frame.shape[:2]
             if corners is not None:
-                self.frames_with_corners.append(frame)
                 objpoints.append(objp)
                 imgpoints.append(corners)
                 frame = self.draw_chessboard(frame, corners)
@@ -153,6 +149,8 @@ class CameraCalibration(QThread):
                 frame,
                 "Detecting calibration board",
             ))
+
+        self.frames_with_corners = len(objpoints)
 
         if not self.frames_with_corners:
             raise Exception("Insufficient frames")
@@ -170,7 +168,6 @@ class CameraCalibration(QThread):
         h, w = self.shape
         if self.distorted:
             self.calc_distorted_intrinsics(imgpoints, objpoints)
-            frame = self.frames_with_corners[0]
             newcameramtx, roi = cv2.getOptimalNewCameraMatrix(
                 self.mtx,
                 self.dist,
@@ -178,8 +175,9 @@ class CameraCalibration(QThread):
                 1,
                 (w, h),
             )
+            self.video_stream = cv2.VideoCapture(self.video_filename)
+            status, frame = self.video_stream.read()
             dst = cv2.undistort(frame, self.mtx, self.dist, None, newcameramtx)
-            cv2.imshow("dist", dst)
             x, y, w, h = roi
             dst = dst[y:y+h, x:x+w]
             self.progress.emit((
