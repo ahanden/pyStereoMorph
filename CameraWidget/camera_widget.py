@@ -109,6 +109,7 @@ class CameraWidget(QWidget):
             camera_config['v_flip'],
             camera_config['h_flip'],
             camera_config['sample_rate'],
+            camera_config['distorted'],
         )
         self.camera_display.calib_stack.setCurrentIndex(1)
         self.cc.progress.connect(self.camera_display.update_calibrate_progress)
@@ -125,7 +126,7 @@ class CameraWidget(QWidget):
             self.camera_display.calib_msg.setText(f"Calibration successful with {frames} frames")
         else:
             self.camera_display.calib_msg.setText(f"Calibration failed with {frames} frames")
-        self.camera_display.calib_frame.clear()
+        #self.camera_display.calib_frame.clear()
         #self.calibrated.emit((mtx, dist))
 
 class CameraList(QWidget):
@@ -161,6 +162,7 @@ class CameraList(QWidget):
             "rotation": 0,
             "v_flip": False,
             "h_flip": False,
+            "distorted": False,
             "video_file": '',
             "sample_rate": 1,
         })

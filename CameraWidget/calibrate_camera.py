@@ -4,7 +4,7 @@ from PySide6.QtCore import QThread, Signal
 
 class CameraCalibration(QThread):
     progress = Signal(tuple)
-    def __init__(self, video_filename, nx, ny, rotate, v_flip, h_flip, sample_rate):
+    def __init__(self, video_filename, nx, ny, rotate, v_flip, h_flip, sample_rate, distorted):
         super().__init__()
         self.video_filename = video_filename
         self.nx = nx
@@ -15,7 +15,11 @@ class CameraCalibration(QThread):
         self.sample_rate = sample_rate
         self.mtx = None
         self.dist = None
+        self.distorted = distorted
         self.frames_with_corners = []
+        self.criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        self.rvecs = None
+        self.tvecs = None
 
     def zoom(self, img, cx, cy, zoom):
         h, w, _ = [ zoom * i for i in img.shape ]
@@ -26,31 +30,31 @@ class CameraCalibration(QThread):
                : ]
         return img
 
-    def draw_chessboard(self, frame, corners):
+    def draw_chessboard(self, frame, corners, zoom=False):
+        img = np.copy(frame)
         to_int = lambda _: (int(i) for i in _)
         radius = int(abs(corners[0][0][0] - corners[1][0][0]) / 2)
         x, y = to_int(corners[0][0])
-        cv2.circle(frame, (int(x), int(y)), radius, (255, 0, 0), radius // 5)
+        cv2.circle(img, (int(x), int(y)), radius, (255, 0, 0), radius // 5)
         x, y = to_int(corners[-1][0])
-        cv2.circle(frame, (x, y), radius, (0, 0, 255), radius // 5)
+        cv2.circle(img, (x, y), radius, (0, 0, 255), radius // 5)
         for i in range(len(corners) - 1):
             x1, y1 = to_int(corners[i][0])
             x2, y2 = to_int(corners[i + 1][0])
-            cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 0), radius // 5)
+            cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), radius // 5)
 
-        '''
-        fx, fy = to_int(corners[-1][0])
-        lx, ly = to_int(corners[0][0])
-        cx = fx + (lx - fx) / 2
-        cy = fy + (ly - fy) / 2
-        zf = min(
-            frame.shape[1] / (lx - fx),
-            frame.shape[0] / (ly - fy),
-        ) * 0.75
-        frame = self.zoom(frame, cx, cy, zf)
-        '''
+        if zoom:
+            fx, fy = to_int(corners[-1][0])
+            lx, ly = to_int(corners[0][0])
+            cx = fx + (lx - fx) / 2
+            cy = fy + (ly - fy) / 2
+            zf = min(
+                img.shape[1] / (lx - fx),
+                img.shape[0] / (ly - fy),
+            ) * 0.75
+            img = self.zoom(img, cx, cy, zf)
 
-        return frame
+        return img
 
     def reorient(self, frame):
         if self.rotate % 360 != 0:
@@ -72,7 +76,6 @@ class CameraCalibration(QThread):
         return frame
 
     def detect_chessboard(self, video_stream):
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
         chessboard_dims = (self.nx, self.ny)
         nth_frame = 0
         while True:
@@ -86,13 +89,48 @@ class CameraCalibration(QThread):
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             corners_found, corners = cv2.findChessboardCorners(gray, chessboard_dims)
             if corners_found:
-                corners = cv2.cornerSubPix(gray, corners, (11,11), (-1,-1), criteria)
+                corners = cv2.cornerSubPix(gray, corners, (11,11), (-1,-1), self.criteria)
                 yield nth_frame, frame, corners
             else:
                 yield nth_frame, frame, None
 
+    def calc_intrinsics(self, imgpoints, objpoints):
+        h, w = self.shape
+        self.mtx = cv2.initCameraMatrix2D(objpoints, imgpoints, (w, h))
+
+        for i, points in enumerate(imgpoints):
+            retval, rvec, tvec, inliers = cv2.solvePnPRansac(
+                objpoints[0],
+                points,
+                self.mtx,
+                np.zeros(5, dtype='float64'),
+                confidence=0.9,
+                reprojectionError=30,
+            )
+            if retval:
+                self.rvecs.append(rvec)
+                self.tvecs.append(tvec)
+            yield i
+
+    def calc_distorted_intrinsics(self, imgpoints, objpoints):
+        h, w = self.shape
+        ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
+            objpoints,
+            imgpoints,
+            (w, h),
+            None,
+            None,
+        )
+        print(dist)
+        if ret:
+            self.rvecs = rvecs
+            self.tvecs = tvecs
+            self.dist = dist
+            self.mtx = mtx
+        else:
+            raise Exception("Calibration failed")
+
     def run(self):
-        #criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
         objp = np.zeros((self.nx * self.ny, 3), np.float32)
         objp[:,:2] = np.mgrid[0:self.ny, 0:self.nx].T.reshape(-1, 2)
 
@@ -127,32 +165,36 @@ class CameraCalibration(QThread):
                 None,
             )
             '''
-        h, w = self.shape
+
         self.progress.emit((0, None, "Computing intrinsic properties"))
-        self.mtx = cv2.initCameraMatrix2D(objpoints, imgpoints, (w, h))
-
-        axis = np.float32([[2,0,0], [0,2,0], [0,0,-2]]).reshape(-1,3)
-        for i, (points, frame) in enumerate(zip(imgpoints, self.frames_with_corners)):
-            retval, rvec, tvec, inliers = cv2.solvePnPRansac(
-                objp,
-                points,
+        h, w = self.shape
+        if self.distorted:
+            self.calc_distorted_intrinsics(imgpoints, objpoints)
+            frame = self.frames_with_corners[0]
+            newcameramtx, roi = cv2.getOptimalNewCameraMatrix(
                 self.mtx,
-                np.zeros(5, dtype='float64'),
-                confidence=0.9,
-                reprojectionError=30,
+                self.dist,
+                (w, h),
+                1,
+                (w, h),
             )
-            imgpts, jac = cv2.projectPoints(axis, rvec, tvec, self.mtx, np.zeros(5, dtype='float64'))
-
-            corner = tuple(points[0].ravel().astype("int32"))
-            imgpts = imgpts.astype("int32")
-            img = cv2.line(frame, corner, tuple(imgpts[0].ravel()), (255,0,0), 5)
-            img = cv2.line(img, corner, tuple(imgpts[1].ravel()), (0,255,0), 5)
-            img = cv2.line(img, corner, tuple(imgpts[2].ravel()), (0,0,255), 5)
-
+            dst = cv2.undistort(frame, self.mtx, self.dist, None, newcameramtx)
+            cv2.imshow("dist", dst)
+            x, y, w, h = roi
+            dst = dst[y:y+h, x:x+w]
             self.progress.emit((
-                100 * (i + 1) / len(self.frames_with_corners),
-                img,
-                "Calculating pose",
+                100,
+                dst,
+                "Estimation complete",
             ))
+        else:
+            self.mtx = cv2.initCameraMatrix2D(objpoints, imgpoints, (w, h))
+
+            for i in self.calc_intrinsics(imgpoints, objpoints):
+                self.progress.emit((
+                    100 * (i + 1) / len(imgpoints),
+                    None,
+                    "Calculating pose",
+                ))
 
         self.finished.emit()

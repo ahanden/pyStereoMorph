@@ -10,6 +10,8 @@ from CameraWidget.calibrate_camera import CameraCalibration
 
 from CameraWidget.frame_painter import *
 
+get_check_state = lambda _: [Qt.CheckState.Unchecked, Qt.CheckState.Checked][_]
+
 class CameraConfig(QWidget):
     updated = Signal(dict)
     cancelled = Signal(bool)
@@ -46,13 +48,15 @@ class CameraConfig(QWidget):
         orient_layout.addWidget(self.vflip_input)
         orient_layout.addWidget(self.hflip_input)
 
-        sample_layout = QHBoxLayout()
-        sample_layout.addWidget(QLabel("Calibration sample rate:"))
+        extras_layout = QHBoxLayout()
+        extras_layout.addWidget(QLabel("Calibration sample rate:"))
         self.sample_rate = QLineEdit()
         onlyInt = QIntValidator()
         onlyInt.setRange(1, 999)
         self.sample_rate.setValidator(onlyInt)
-        sample_layout.addWidget(self.sample_rate)
+        extras_layout.addWidget(self.sample_rate)
+        self.distortion_input = QCheckBox("Fisheye Camera")
+        extras_layout.addWidget(self.distortion_input)
 
         self.submit_btn = QPushButton("Save Changes")
         self.submit_btn.pressed.connect(lambda: self.updated.emit(self.get_config()))
@@ -66,7 +70,7 @@ class CameraConfig(QWidget):
         outer_layout.addWidget(self.video_frame_label)
         outer_layout.addLayout(file_row_layout)
         outer_layout.addLayout(orient_layout)
-        outer_layout.addLayout(sample_layout)
+        outer_layout.addLayout(extras_layout)
         outer_layout.addLayout(btn_layout)
 
         self.setLayout(outer_layout)
@@ -78,12 +82,13 @@ class CameraConfig(QWidget):
         self.rotation_input.setText(str(config['rotation']))
         self.video_file = config['video_file']
         self.sample_rate.setText(str(config['sample_rate']))
+        self.distortion_input.setCheckState(get_check_state(config['distorted']))
         if self.video_file:
             self.file_label.setText(config['video_file'])
         else:
             self.file_label.setText("Missing calibration video file")
-        self.vflip_input.setCheckState(Qt.CheckState.Checked if config['v_flip'] else Qt.CheckState.Unchecked)
-        self.hflip_input.setCheckState(Qt.CheckState.Checked if config['h_flip'] else Qt.CheckState.Unchecked)
+        self.vflip_input.setCheckState(get_check_state(config['v_flip']))
+        self.hflip_input.setCheckState(get_check_state(config['h_flip']))
 
     def get_config(self):
         name = self.camera_name.text().strip()
@@ -98,6 +103,7 @@ class CameraConfig(QWidget):
             "rotation": rotation,
             "v_flip": self.vflip_input.checkState() == Qt.CheckState.Checked,
             "h_flip": self.hflip_input.checkState() == Qt.CheckState.Checked,
+            "distorted": self.distortion_input.checkState() == Qt.CheckState.Checked,
             "video_file": self.video_file,
             "sample_rate": int(self.sample_rate.text()),
         }
